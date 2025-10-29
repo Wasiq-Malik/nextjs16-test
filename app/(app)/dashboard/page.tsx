@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { headers } from 'next/headers';
 import { StatsCards } from '@/components/dashboard/stats-cards';
 import { CategoryChart } from '@/components/dashboard/category-chart';
 import { TrendChart } from '@/components/dashboard/trend-chart';
@@ -24,7 +25,8 @@ async function getDemoUser() {
 }
 
 async function getDashboardStats(userId: string) {
-  // Removed 'use cache' - dashboard should show real-time data
+  // Access headers to make this route dynamic (required for new Date() in Next.js 16)
+  await headers();
   
   // Use current month
   const targetDate = new Date();
