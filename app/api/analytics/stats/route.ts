@@ -3,9 +3,11 @@ import { db } from '@/lib/db';
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
 
 // GET /api/analytics/stats - Get dashboard statistics
+// Note: This route is automatically dynamic due to searchParams usage
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
+    // Use nextUrl.searchParams in Next.js 15+ for better performance and prerendering
+    const searchParams = request.nextUrl.searchParams;
     const userId = searchParams.get('userId');
     const monthParam = searchParams.get('month'); // Optional: YYYY-MM-DD
 
@@ -93,46 +95,61 @@ export async function GET(request: NextRequest) {
     });
 
     // Get category details
-    const categoryIds = categoryBreakdown.map((item) => item.categoryId);
+    type CategoryBreakdownItem = {
+      categoryId: string;
+      type: string;
+      _sum: { amount: number | null };
+    };
+
+    const categoryIds = categoryBreakdown.map((item: CategoryBreakdownItem) => item.categoryId);
     const categories = await db.category.findMany({
       where: { id: { in: categoryIds } },
     });
 
-    const categoryMap = new Map(categories.map((cat) => [cat.id, cat]));
+    type CategoryType = {
+      id: string;
+      name: string;
+      icon: string | null;
+      color: string | null;
+    };
+
+    const categoryMap = new Map<string, CategoryType>(categories.map((cat: CategoryType) => [cat.id, cat]));
+
+    const defaultCategory: CategoryType = { id: '', name: 'Unknown', icon: null, color: null };
 
     const expensesByCategory = categoryBreakdown
-      .filter((item) => item.type === 'EXPENSE')
-      .map((item) => {
-        const category = categoryMap.get(item.categoryId);
+      .filter((item: CategoryBreakdownItem) => item.type === 'EXPENSE')
+      .map((item: CategoryBreakdownItem) => {
+        const category: CategoryType = categoryMap.get(item.categoryId) ?? defaultCategory;
         return {
           categoryId: item.categoryId,
-          categoryName: category?.name || 'Unknown',
-          icon: category?.icon,
-          color: category?.color,
+          categoryName: category.name || 'Unknown',
+          icon: category.icon || null,
+          color: category.color || null,
           amount: item._sum.amount || 0,
           percentage: totalExpenses
             ? ((item._sum.amount || 0) / totalExpenses) * 100
             : 0,
         };
       })
-      .sort((a, b) => b.amount - a.amount);
+      .sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
 
     const incomeByCategory = categoryBreakdown
-      .filter((item) => item.type === 'INCOME')
-      .map((item) => {
-        const category = categoryMap.get(item.categoryId);
+      .filter((item: CategoryBreakdownItem) => item.type === 'INCOME')
+      .map((item: CategoryBreakdownItem) => {
+        const category: CategoryType = categoryMap.get(item.categoryId) ?? defaultCategory;
         return {
           categoryId: item.categoryId,
-          categoryName: category?.name || 'Unknown',
-          icon: category?.icon,
-          color: category?.color,
+          categoryName: category.name || 'Unknown',
+          icon: category.icon || null,
+          color: category.color || null,
           amount: item._sum.amount || 0,
           percentage: totalIncome
             ? ((item._sum.amount || 0) / totalIncome) * 100
             : 0,
         };
       })
-      .sort((a, b) => b.amount - a.amount);
+      .sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
 
     // --- Recent Transactions ---
     const recentTransactions = await db.transaction.findMany({

@@ -86,8 +86,8 @@ async function main() {
 
   // Create some sample transactions
   const categories = await prisma.category.findMany();
-  const foodCategory = categories.find((c) => c.name === 'Food & Dining');
-  const salaryCategory = categories.find((c) => c.name === 'Salary');
+  const foodCategory = categories.find((c: { name: string }) => c.name === 'Food & Dining');
+  const salaryCategory = categories.find((c: { name: string }) => c.name === 'Salary');
 
   if (foodCategory && salaryCategory) {
     await prisma.transaction.create({

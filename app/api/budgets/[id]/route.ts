@@ -6,9 +6,10 @@ import { startOfMonth } from 'date-fns';
 // PUT /api/budgets/[id] - Update a budget
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
     
     // Validate input
@@ -21,7 +22,7 @@ export async function PUT(
     };
 
     const budget = await db.budget.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         category: true,
@@ -49,11 +50,12 @@ export async function PUT(
 // DELETE /api/budgets/[id] - Delete a budget
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await db.budget.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json(

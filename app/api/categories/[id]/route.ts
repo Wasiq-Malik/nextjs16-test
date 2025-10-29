@@ -4,12 +4,13 @@ import { db } from '@/lib/db';
 // DELETE /api/categories/[id] - Delete a custom category (only user categories, not system)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     // Check if it's a system category (userId is null)
     const category = await db.category.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!category) {
@@ -27,7 +28,7 @@ export async function DELETE(
     }
 
     await db.category.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json(

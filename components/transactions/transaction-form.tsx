@@ -42,7 +42,8 @@ const transactionFormSchema = z.object({
   date: z.date(),
 });
 
-type TransactionFormValues = z.infer<typeof transactionFormSchema>;
+// Use output type to handle coercion properly
+type TransactionFormValues = z.output<typeof transactionFormSchema>;
 
 interface Category {
   id: string;
@@ -67,7 +68,7 @@ export function TransactionForm({
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<TransactionFormValues>({
+  const form = useForm({
     resolver: zodResolver(transactionFormSchema),
     defaultValues: {
       type: transaction?.type || 'EXPENSE',
@@ -175,6 +176,8 @@ export function TransactionForm({
                       placeholder="0.00"
                       className="pl-7"
                       {...field}
+                      value={field.value as number | undefined}
+                      onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
                     />
                   </div>
                 </FormControl>

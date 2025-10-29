@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
 import { transactionSchema } from '@/lib/validations';
-import { Prisma } from '@prisma/client';
 
 // GET /api/transactions - Get all transactions with optional filters
 export async function GET(request: NextRequest) {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build query filters
-    const where: Prisma.TransactionWhereInput = {
+    const where = {
       userId,
       ...(type && type !== 'ALL' && { type: type as 'INCOME' | 'EXPENSE' }),
       ...(categoryId && { categoryId }),
@@ -69,6 +69,10 @@ export async function POST(request: NextRequest) {
         category: true,
       },
     });
+
+    // Revalidate dashboard and transactions pages to show updated data
+    revalidatePath('/dashboard');
+    revalidatePath('/transactions');
 
     return NextResponse.json(transaction, { status: 201 });
   } catch (error) {

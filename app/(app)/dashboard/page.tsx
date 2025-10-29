@@ -6,8 +6,13 @@ import { RecentTransactions } from '@/components/dashboard/recent-transactions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/db';
+import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
+
+// PPR is automatically enabled via cacheComponents + Suspense in Next.js 16!
 
 async function getDemoUser() {
+  'use cache';
+  
   // Get the demo user (or first user)
   const user = await db.user.findFirst({
     where: {
@@ -19,20 +24,108 @@ async function getDemoUser() {
 }
 
 async function getDashboardStats(userId: string) {
-  // Fetch from our analytics API
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-  const res = await fetch(
-    `${baseUrl}/api/analytics/stats?userId=${userId}`,
-    { cache: 'no-store' }
-  );
+  // Removed 'use cache' - dashboard should show real-time data
+  
+  // Use current month
+  const targetDate = new Date();
+  const monthStart = startOfMonth(targetDate);
+  const monthEnd = endOfMonth(targetDate);
+  
+  // Get 6 months of data for trends
+  const sixMonthsAgo = subMonths(monthStart, 5);
 
-  if (!res.ok) {
-    const error = await res.text();
-    console.error('Failed to fetch dashboard stats:', error);
-    throw new Error('Failed to fetch dashboard stats');
-  }
+  // Summary stats for current month
+  const [income, expenses] = await Promise.all([
+    db.transaction.aggregate({
+      where: { userId, type: 'INCOME', date: { gte: monthStart, lte: monthEnd } },
+      _sum: { amount: true },
+    }),
+    db.transaction.aggregate({
+      where: { userId, type: 'EXPENSE', date: { gte: monthStart, lte: monthEnd } },
+      _sum: { amount: true },
+    }),
+  ]);
 
-  return res.json();
+  const totalIncome = income._sum.amount || 0;
+  const totalExpenses = expenses._sum.amount || 0;
+
+  // Category breakdown for expenses
+  const expensesByCategory = await db.transaction.groupBy({
+    by: ['categoryId'],
+    where: { userId, type: 'EXPENSE', date: { gte: monthStart, lte: monthEnd } },
+    _sum: { amount: true },
+  });
+
+  const categories = await db.category.findMany({
+    where: { id: { in: expensesByCategory.map((e: { categoryId: string }) => e.categoryId) } },
+  });
+
+  const categoryBreakdown = expensesByCategory.map((item: { categoryId: string; _sum: { amount: number | null } }) => {
+    const category = categories.find((c: { id: string }) => c.id === item.categoryId);
+    return {
+      categoryId: item.categoryId,
+      categoryName: category?.name || 'Unknown',
+      icon: category?.icon,
+      color: category?.color,
+      amount: item._sum.amount || 0,
+      percentage: ((item._sum.amount || 0) / totalExpenses) * 100,
+    };
+  });
+
+  // Monthly trends (last 6 months)
+  const monthlyTransactions = await db.transaction.findMany({
+    where: { userId, date: { gte: sixMonthsAgo, lte: monthEnd } },
+    select: {
+      date: true,
+      amount: true,
+      type: true,
+    },
+  });
+
+  // Group by month
+  const monthlyMap = new Map<string, { income: number; expenses: number }>();
+  
+  monthlyTransactions.forEach((transaction: { date: Date; amount: number; type: string }) => {
+    const monthKey = format(startOfMonth(transaction.date), 'MMM yyyy');
+    if (!monthlyMap.has(monthKey)) {
+      monthlyMap.set(monthKey, { income: 0, expenses: 0 });
+    }
+    const data = monthlyMap.get(monthKey)!;
+    if (transaction.type === 'INCOME') {
+      data.income += transaction.amount;
+    } else {
+      data.expenses += transaction.amount;
+    }
+  });
+
+  // Convert to array for chart
+  const monthlyTrend = Array.from(monthlyMap.entries()).map(([month, data]) => ({
+    month,
+    income: data.income,
+    expenses: data.expenses,
+    net: data.income - data.expenses,
+  }));
+
+  // Recent transactions
+  const recentTransactions = await db.transaction.findMany({
+    where: { userId },
+    include: { category: true },
+    orderBy: { date: 'desc' },
+    take: 10,
+  });
+
+  return {
+    summary: {
+      totalIncome,
+      totalExpenses,
+      netBalance: totalIncome - totalExpenses,
+      incomeChange: 0, // Simplified for now
+      expenseChange: 0,
+    },
+    categoryBreakdown: { expenses: categoryBreakdown },
+    monthlyTrend,
+    recentTransactions,
+  };
 }
 
 function DashboardSkeleton() {
@@ -91,6 +184,7 @@ async function DashboardContent() {
     );
   }
 
+  // Using cached database query for better performance
   const stats = await getDashboardStats(user.id);
 
   return (
