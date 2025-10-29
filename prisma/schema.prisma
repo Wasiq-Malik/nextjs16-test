@@ -1,0 +1,83 @@
+// ExpenseFlow - Expense Tracker Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model - for authentication and ownership
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  transactions Transaction[]
+  budgets      Budget[]
+  categories   Category[]
+}
+
+// Transaction model - income and expenses
+model Transaction {
+  id          String          @id @default(cuid())
+  type        TransactionType
+  amount      Float
+  categoryId  String
+  category    Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  description String?
+  date        DateTime
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([date])
+  @@index([categoryId])
+  @@index([type])
+}
+
+// Category model - for organizing transactions
+model Category {
+  id           String        @id @default(cuid())
+  name         String
+  icon         String?       // Emoji or icon name (e.g., "🍕", "home", etc.)
+  color        String        @default("#3b82f6") // Hex color for UI
+  type         TransactionType // Can only be used for income or expense
+  userId       String?       // null = system category, not null = user custom
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  budgets      Budget[]
+  createdAt    DateTime      @default(now())
+
+  @@unique([name, userId]) // Each user can have unique category names
+  @@index([userId])
+  @@index([type])
+}
+
+// Budget model - monthly spending limits per category
+model Budget {
+  id         String   @id @default(cuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  amount     Float    // Budget limit amount
+  month      DateTime // First day of the month (e.g., 2024-03-01)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, categoryId, month]) // One budget per category per month
+  @@index([userId])
+  @@index([month])
+}
+
+// Enum for transaction type
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
